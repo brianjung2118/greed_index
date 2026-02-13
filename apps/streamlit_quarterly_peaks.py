@@ -22,9 +22,12 @@ import altair as alt
 # =========================
 # CONFIG
 # =========================
+# Paths are relative to this script: BASE_DIR = repo root (folder containing apps/).
+# Works locally and on Streamlit Cloud — no hardcoded machine paths.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PRICES_DIR = BASE_DIR / "prices"
+FUNDAMENTALS_DIR = BASE_DIR / "fundamentals"
 FOCUS10_PANEL_PATH = BASE_DIR / "pipeline_output_attention" / "attention_greed_panel_daily_focus10.csv"
 
 FOCUS_STOCKS = [
@@ -70,6 +73,27 @@ def load_greed_panel() -> pd.DataFrame:
 
 def get_greed_for_stock(panel: pd.DataFrame, code: str) -> pd.DataFrame:
     return panel.loc[panel["company_code"] == code, ["dt", "greed_ratio"]].copy()
+
+
+@st.cache_data(show_spinner=False)
+def load_fundamentals_csv(code: str) -> pd.DataFrame | None:
+    """Load fundamentals CSV; return DataFrame with date and 'income' (operating_income or net_income)."""
+    path = FUNDAMENTALS_DIR / f"{code}.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip().str.lower()
+    df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y", errors="coerce")
+    df = df.dropna(subset=["date"])
+    # Use operating_income or net_income, whichever exists (prefer operating_income)
+    if "operating_income" in df.columns:
+        income_col = "operating_income"
+    elif "net_income" in df.columns:
+        income_col = "net_income"
+    else:
+        return None
+    df["income"] = pd.to_numeric(df[income_col], errors="coerce")
+    return df[["date", "income"]].sort_values("date").reset_index(drop=True)
 
 
 # =========================
@@ -238,6 +262,70 @@ def main():
         title=f"Price & greed ratio — {selected_peak['quarter']} (peak {peak_date.strftime('%Y-%m-%d')})",
     )
     st.altair_chart(combined, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # Chart 2: Greed ratio & income (operating_income or net_income) time series
+    # -------------------------------------------------------------------------
+    st.subheader("Greed ratio & income (time series)")
+    st.caption("Only dates where both greed ratio and income exist. Both series normalized to 0–1 so movements are comparable.")
+
+    fund_df = load_fundamentals_csv(code)
+    if fund_df is None or fund_df.empty:
+        st.info("No fundamentals data for this stock. Add a CSV in `fundamentals/{code}.csv` with date, close, and operating_income or net_income.")
+    else:
+        # Rolling window for greed ratio (dropdown)
+        greed_roll_options = {
+            "Daily (no rolling)": 1,
+            "1 week (7 days)": 7,
+            "1 month (30 days)": 30,
+            "Quarterly (90 days)": 90,
+        }
+        greed_roll_label = st.selectbox(
+            "Greed ratio rolling window",
+            options=list(greed_roll_options.keys()),
+            index=1,
+        )
+        greed_roll_days = greed_roll_options[greed_roll_label]
+
+        # Same 5-year window as the rest of the page
+        fund_df = fund_df[(fund_df["date"] >= cutoff) & (fund_df["date"] <= max_date)].copy()
+        greed_ts = get_greed_for_stock(panel, code)
+        greed_ts = greed_ts.rename(columns={"dt": "date"})
+        greed_ts["greed_ratio"] = pd.to_numeric(greed_ts["greed_ratio"], errors="coerce")
+        merge_gi = fund_df.merge(greed_ts, on="date", how="inner")
+        merge_gi = merge_gi.dropna(subset=["greed_ratio", "income"])
+        merge_gi = merge_gi.sort_values("date").reset_index(drop=True)
+        if merge_gi.empty:
+            st.info("No overlapping dates with both greed ratio and income in the last 5 years.")
+        else:
+            # Apply rolling mean to greed ratio (min_periods=1 keeps early points, smooths the rest)
+            merge_gi["greed_ratio_rolled"] = (
+                merge_gi["greed_ratio"].rolling(window=greed_roll_days, min_periods=1).mean()
+            )
+            merge_gi["date_str"] = merge_gi["date"].dt.strftime("%Y-%m-%d")
+            # Normalize both to 0–1 (use rolled greed for the green line)
+            g_min, g_max = merge_gi["greed_ratio_rolled"].min(), merge_gi["greed_ratio_rolled"].max()
+            g_range = g_max - g_min
+            merge_gi["greed_norm"] = (merge_gi["greed_ratio_rolled"] - g_min) / g_range if g_range > 0 else 0.5
+            i_min, i_max = merge_gi["income"].min(), merge_gi["income"].max()
+            i_range = i_max - i_min
+            merge_gi["income_norm"] = (merge_gi["income"] - i_min) / i_range if i_range > 0 else 0.5
+
+            greed_ts_line = alt.Chart(merge_gi).mark_line(stroke="green", strokeWidth=2, strokeDash=[4, 2]).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("greed_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
+                tooltip=["date_str:N", "greed_ratio_rolled:Q", "income:Q"],
+            )
+            income_line = alt.Chart(merge_gi).mark_line(stroke="steelblue", strokeWidth=2).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("income_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
+                tooltip=["date_str:N", "greed_ratio_rolled:Q", "income:Q"],
+            )
+            chart_gi = (greed_ts_line + income_line).properties(
+                height=350,
+                title=f"Greed ratio & income (greed: {greed_roll_label}; green = greed, blue = income)",
+            )
+            st.altair_chart(chart_gi, use_container_width=True)
 
 
 if __name__ == "__main__":
