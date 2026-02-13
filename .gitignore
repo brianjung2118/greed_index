@@ -16,3 +16,17 @@ env/
 
 # Large files over GitHub's 100 MB limit (keep locally, do not push)
 pipeline_output_attention/attention_panel_daily.csv
+
+# --- Repo contains only the Streamlit app + required data; exclude the rest ---
+# Scripts (may contain DB credentials / sensitive config)
+scripts/
+# Other app (not deployed)
+apps/streamlit_viewer.py
+# Lexicon / discovery outputs (not needed for streamlit_quarterly_peaks)
+lexicon_discovery_100k/
+lexicon_discovery_outputs/
+lexicon_greed_final.txt
+text_samples/
+# Panel CSVs not used by streamlit_quarterly_peaks (only focus10 is required)
+pipeline_output_attention/attention_greed_panel_daily.csv
+pipeline_output_attention/attention_greed_panel_daily_with_ratio.csv
