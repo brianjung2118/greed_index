@@ -311,13 +311,14 @@ def main():
             i_range = i_max - i_min
             merge_gi["income_norm"] = (merge_gi["income"] - i_min) / i_range if i_range > 0 else 0.5
 
+            x_axis = alt.Axis(title="Date", format="%b %Y")
             greed_ts_line = alt.Chart(merge_gi).mark_line(stroke="green", strokeWidth=2, strokeDash=[4, 2]).encode(
-                x=alt.X("date:T", title="Date"),
+                x=alt.X("date:T", axis=x_axis),
                 y=alt.Y("greed_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
                 tooltip=["date_str:N", "greed_ratio_rolled:Q", "income:Q"],
             )
             income_line = alt.Chart(merge_gi).mark_line(stroke="steelblue", strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
+                x=alt.X("date:T", axis=x_axis),
                 y=alt.Y("income_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
                 tooltip=["date_str:N", "greed_ratio_rolled:Q", "income:Q"],
             )
