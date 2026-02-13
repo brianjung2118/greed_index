@@ -1,0 +1,80 @@
+# Greed lexicon — finalised candidates for flagging "greed" in Naver discussion titles
+# One phrase per line. Matching is case-insensitive after normalisation (see build_greed_lexicon.py).
+# Used to set greed=1 when title contains any of these phrases; otherwise greed=0.
+#
+# Criteria: speculative enthusiasm, FOMO, "get rich", urgency to buy, limit-up celebration,
+# or clear upside confidence. Excludes politics, company names, pure news.
+
+# --- Unigrams (single tokens) ---
+부자되세요
+최고수혜
+급등중
+주가전망
+올라타라
+사둬라
+투자하자
+상한가
+돌파했습니다
+대박뉴스
+올라갈듯
+오를꺼같지
+매수한
+설레발들
+매력적인
+확신한다
+날라
+버는
+신의한수
+호재임
+유망
+꿈의
+초대형
+대박
+
+# --- Bigrams ---
+주식 매수한
+내일 상한가
+상한가 예정
+다음주 상한가
+상한가 가자
+상한가 축하
+상한가 7종목
+우보천리 대박뉴스
+모두 부자되세요
+들어가도 될까요
+개발 기대
+개미들 보거라
+좋은 소식
+계속 매수
+무상주 배정
+주가 상승
+미증시 폭등
+100만원 1000일
+다음주 주가
+주가 전망
+26년 주가전망
+올해 주식
+백신 개발
+잠이 안오네요
+부자 되세요
+버는 방법
+주식으로 버는
+목표가 상향
+상한가 미리
+내일 대폭등
+
+# --- Trigrams ---
+올해 주식 매수한
+다음주 상한가
+상한가 축하
+우보천리 대박뉴스
+신풍제약 우보천리 대박뉴스
+개미들 보거라 형이다
+계속 매수
+무상주 배정
+주가 상승
+좋은 소식
+백신 개발 기대
+시간외 상한가 7종목
+내일 상한가
+대박뉴스

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Large files over GitHub's 100 MB limit (keep locally, do not push)
+pipeline_output_attention/attention_panel_daily.csv
