@@ -173,12 +173,14 @@ def main():
         return
     max_date = price_df["date"].max()
     cutoff = max_date - pd.Timedelta(days=YEARS_LOOKBACK * 365)
+    price_full = price_df.copy()
     price_df = price_df.loc[price_df["date"].notna() & (price_df["date"] >= cutoff)].reset_index(drop=True)
     if price_df.empty:
         st.warning(f"No price data in the last {YEARS_LOOKBACK} years for {code}.")
         return
 
     greed_df = get_greed_for_stock(panel, code)
+    full_merged = merge_price_and_greed(price_full, greed_df)
     window_days = st.slider("Window around peak (days before/after)", 1, 60, DEFAULT_WINDOW_DAYS)
 
     peaks, windows = quarterly_peaks_and_windows(price_df, window_days)
@@ -262,6 +264,63 @@ def main():
         title=f"Price & greed ratio — {selected_peak['quarter']} (peak {peak_date.strftime('%Y-%m-%d')})",
     )
     st.altair_chart(combined, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # Full history: price vs greed ratio overlay (normalized 0–1 for co-movement)
+    # -------------------------------------------------------------------------
+    st.subheader("Price vs greed ratio — full history (normalized)")
+    st.caption("All dates where both price and greed ratio exist. Both series scaled to 0–1 to compare co-movements.")
+
+    greed_roll_options_overlay = {
+        "Daily (no rolling)": 1,
+        "1 week (7 days)": 7,
+        "1 month (30 days)": 30,
+        "Quarterly (90 days)": 90,
+    }
+    greed_roll_label_overlay = st.selectbox(
+        "Greed ratio rolling window (for chart below)",
+        options=list(greed_roll_options_overlay.keys()),
+        index=1,
+        key="greed_roll_overlay",
+    )
+    greed_roll_days_overlay = greed_roll_options_overlay[greed_roll_label_overlay]
+
+    ts_df = full_merged.copy()
+    ts_df["price"] = pd.to_numeric(ts_df["price"], errors="coerce")
+    ts_df["greed_ratio"] = pd.to_numeric(ts_df["greed_ratio"], errors="coerce")
+    ts_df = ts_df.dropna(subset=["date", "price", "greed_ratio"]).sort_values("date").reset_index(drop=True)
+    if not ts_df.empty:
+        ts_df["greed_ratio_rolled"] = (
+            ts_df["greed_ratio"].rolling(window=greed_roll_days_overlay, min_periods=1).mean()
+        )
+    p_min = ts_df["price"].min() if not ts_df.empty else 0.0
+    p_max = ts_df["price"].max() if not ts_df.empty else 1.0
+    g_min = ts_df["greed_ratio_rolled"].min() if not ts_df.empty and "greed_ratio_rolled" in ts_df.columns else 0.0
+    g_max = ts_df["greed_ratio_rolled"].max() if not ts_df.empty and "greed_ratio_rolled" in ts_df.columns else 1.0
+    p_range = (p_max - p_min) if (p_max - p_min) > 0 else 1.0
+    g_range = (g_max - g_min) if (g_max - g_min) > 0 else 1.0
+    ts_df["price_norm"] = (ts_df["price"] - p_min) / p_range
+    ts_df["greed_norm"] = (ts_df["greed_ratio_rolled"] - g_min) / g_range
+    ts_df["date_str"] = ts_df["date"].dt.strftime("%Y-%m-%d")
+
+    if ts_df.empty or (ts_df["price_norm"].notna().sum() == 0 and ts_df["greed_norm"].notna().sum() == 0):
+        st.info("No overlapping dates with both price and greed ratio.")
+    else:
+        price_ts = alt.Chart(ts_df).mark_line(stroke="steelblue", strokeWidth=2).encode(
+            x=alt.X("date:T", title="Date"),
+            y=alt.Y("price_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
+            tooltip=["date_str:N", "price:Q", "greed_ratio_rolled:Q"],
+        )
+        greed_ts = alt.Chart(ts_df).mark_line(stroke="green", strokeWidth=2, strokeDash=[4, 2]).encode(
+            x=alt.X("date:T", title="Date"),
+            y=alt.Y("greed_norm:Q", title="Normalized (0–1)", scale=alt.Scale(domain=[0, 1])),
+            tooltip=["date_str:N", "price:Q", "greed_ratio_rolled:Q"],
+        )
+        overlay = (price_ts + greed_ts).properties(
+            height=350,
+            title=f"Price (blue) vs greed ratio (green, {greed_roll_label_overlay}) — {code} — full history",
+        )
+        st.altair_chart(overlay, use_container_width=True)
 
     # -------------------------------------------------------------------------
     # Chart 2: Greed ratio & income (operating_income or net_income) time series
